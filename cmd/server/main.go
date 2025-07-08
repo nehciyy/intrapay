@@ -8,8 +8,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 
-	"github.com/nehciyy/intrapay.git/internal/api"
-	"github.com/nehciyy/intrapay.git/internal/db"
+	"github.com/nehciyy/intrapay/internal/api"
+	"github.com/nehciyy/intrapay/internal/db"
 )
 
 func main() {

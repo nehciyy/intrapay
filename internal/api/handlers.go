@@ -7,8 +7,8 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/nehciyy/intrapay.git/internal/models"
-	"github.com/nehciyy/intrapay.git/internal/service"
+	"github.com/nehciyy/intrapay/internal/models"
+	"github.com/nehciyy/intrapay/internal/service"
 )
 
 type Server struct {
