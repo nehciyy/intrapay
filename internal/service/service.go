@@ -10,6 +10,11 @@ import (
 )
 
 type DefaultService struct{}
+
+func NewService() Service {
+	return &DefaultService{}
+}
+
 const maxRetries = 3
 
 
