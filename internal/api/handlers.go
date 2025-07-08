@@ -13,6 +13,7 @@ import (
 
 type Server struct {
 	DB *sql.DB
+	Service service.Service
 }
 
 func (s *Server) CreateAccount(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +24,7 @@ func (s *Server) CreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := service.CreateAccount(s.DB, req.AccountID, req.InitialBalance); err != nil {
+	if err := s.Service.CreateAccount(s.DB, req.AccountID, req.InitialBalance); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -38,7 +39,7 @@ func (s *Server) GetAccount(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    balance, err := service.GetAccount(s.DB, id)
+    balance, err := s.Service.GetAccount(s.DB, id)
 	if err != nil {
         http.Error(w, err.Error(), http.StatusNotFound)
         return
@@ -58,7 +59,7 @@ func (s *Server) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	transactionID, err := service.CreateTransaction(s.DB, req.SourceAccountID, req.DestinationAccountID, req.Amount)
+	transactionID, err := s.Service.CreateTransaction(s.DB, req.SourceAccountID, req.DestinationAccountID, req.Amount)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

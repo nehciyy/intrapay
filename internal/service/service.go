@@ -9,15 +9,17 @@ import (
 	"time"
 )
 
+type DefaultService struct{}
 const maxRetries = 3
 
-func CreateAccount(db *sql.DB, accountID int64, initialBalance float64) error {
+
+func (s *DefaultService) CreateAccount(db *sql.DB, accountID int64, initialBalance float64) error {
 	query := `INSERT INTO accounts(account_id, balance) VALUES($1, $2)`
 	_, err := db.Exec(query, accountID, initialBalance)
 	return err
 }
 
-func GetAccount(db *sql.DB, accountID int64) (float64, error) {
+func (s *DefaultService) GetAccount(db *sql.DB, accountID int64) (float64, error) {
 	var balance float64
 
 	query := `SELECT balance FROM accounts WHERE account_id = $1`
@@ -30,7 +32,7 @@ func GetAccount(db *sql.DB, accountID int64) (float64, error) {
 	return balance, err
 }
 
-func CreateTransaction(db *sql.DB, sourceID int64, destID int64, amount float64) (string, error) {
+func (s *DefaultService) CreateTransaction(db *sql.DB, sourceID int64, destID int64, amount float64) (string, error) {
 	var transactionID string
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
