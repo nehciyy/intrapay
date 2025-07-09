@@ -93,7 +93,7 @@ This will:
 Once complete, the app will be running at:
 📍 `http://localhost:8080`
 
----
+**Note: Make sure Docker is running on your system. No need to install PostgreSQL locally, it is containerized.**
 
 ### 3. Test API with curl
 
@@ -118,6 +118,31 @@ curl -X GET http://localhost:8080/accounts/1
  -H "Content-Type: application/json" \
  -d '{"source_account_id": 2, "destination_account_id": 1, "amount": 50}'
 ```
+
+---
+
+That's a useful command for developers! Here's a clean and general way to include it in your documentation:
+
+---
+
+### Accessing the PostgreSQL Database
+
+To inspect your database from the terminal, you can run:
+
+```bash
+docker exec -it intrapay_db psql -U <your_user> -d <your_database>
+```
+
+For example, if you're using the default credentials in `.env`:
+
+```bash
+docker exec -it intrapay_db psql -U postgres -d intrapay
+```
+
+**Tip:** Replace `<your_user>` and `<your_database>` with the values from your `.env` file:
+
+- `POSTGRES_USER`
+- `POSTGRES_DB`
 
 ---
 
