@@ -30,12 +30,6 @@ IntraPay is a lightweight internal transfer system built in Go. It allows users 
 }
 ```
 
-**Response**:
-
-- `201 Created` on success
-- `400 Bad Request` for invalid JSON
-- `500 Internal Server Error` for database issues
-
 ---
 
 ### 2. Get Account Balance
@@ -55,10 +49,6 @@ IntraPay is a lightweight internal transfer system built in Go. It allows users 
 }
 ```
 
-- `200 OK` on success
-- `400 Bad Request` if ID is invalid
-- `404 Not Found` if account doesn't exist
-
 ---
 
 ### 3. Create Transaction
@@ -74,19 +64,6 @@ IntraPay is a lightweight internal transfer system built in Go. It allows users 
   "amount": 50.0
 }
 ```
-
-**Response**:
-
-```json
-{
-  "transaction_id": "123",
-  "message": "Transaction successfully processed"
-}
-```
-
-- `201 Created` on success
-- `400 Bad Request` for malformed input
-- `500 Internal Server Error` for failure to complete transaction
 
 ---
 
