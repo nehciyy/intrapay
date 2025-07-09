@@ -214,7 +214,7 @@ func TestPostgresAccountRepository_AccountExists(t *testing.T) {
 // TestGetAccountBalanceTx tests the GetAccountBalanceTx method.
 func TestPostgresAccountRepository_GetAccountBalanceTx(t *testing.T) {
 	db, mock := setupMockDB(t)
-	repo := NewPostgresAccountRepository(db)
+	repo := NewPostgresTransactionRepository(db)
 
 	tests := []struct {
 		name          string
@@ -292,7 +292,7 @@ func TestPostgresAccountRepository_GetAccountBalanceTx(t *testing.T) {
 // TestAccountExistsTx tests the AccountExistsTx method.
 func TestPostgresAccountRepository_AccountExistsTx(t *testing.T) {
 	db, mock := setupMockDB(t)
-	repo := NewPostgresAccountRepository(db)
+	repo := NewPostgresTransactionRepository(db)
 
 	tests := []struct {
 		name          string
@@ -374,7 +374,7 @@ func TestPostgresAccountRepository_AccountExistsTx(t *testing.T) {
 // TestUpdateBalanceTx tests the UpdateBalanceTx method.
 func TestPostgresAccountRepository_UpdateBalanceTx(t *testing.T) {
 	db, mock := setupMockDB(t)
-	repo := NewPostgresAccountRepository(db)
+	repo := NewPostgresTransactionRepository(db)
 
 	tests := []struct {
 		name          string
@@ -497,7 +497,7 @@ func TestPostgresAccountRepository_InsertTransactionLogTx(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db, mock := setupMockDB(t) // NEW: Get fresh mock DB per subtest
-			repo := NewPostgresAccountRepository(db) // NEW: Create repo with fresh DB
+			repo := NewPostgresTransactionRepository(db) // NEW: Create repo with fresh DB
 
 			tt.mockExpect(mock)
 			

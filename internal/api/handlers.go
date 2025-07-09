@@ -1,7 +1,6 @@
 package api
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -12,43 +11,42 @@ import (
 )
 
 type Server struct {
-	DB *sql.DB
 	Service service.Service
 }
 
 func (s *Server) CreateAccount(w http.ResponseWriter, r *http.Request) {
 	req := &models.CreateAccountRequest{}
 
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil{
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if err := s.Service.CreateAccount(s.DB, req.AccountID, req.InitialBalance); err != nil {
+	if err := s.Service.CreateAccount(req.AccountID, req.InitialBalance); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-    
-    w.WriteHeader(http.StatusCreated)
+
+	w.WriteHeader(http.StatusCreated)
 }
 
 func (s *Server) GetAccount(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(mux.Vars(r)["id"], 10, 64)
-    if err != nil {
-        http.Error(w, "invalid account ID", http.StatusBadRequest)
-        return
-    }
-
-    balance, err := s.Service.GetAccount(s.DB, id)
 	if err != nil {
-        http.Error(w, err.Error(), http.StatusNotFound)
-        return
-    }
+		http.Error(w, "invalid account ID", http.StatusBadRequest)
+		return
+	}
 
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "account_id": id,
-        "balance":    balance,
-    })
+	balance, err := s.Service.GetAccount(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"account_id": id,
+		"balance":    balance,
+	})
 }
 
 func (s *Server) CreateTransaction(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +57,7 @@ func (s *Server) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	transactionID, err := s.Service.CreateTransaction(s.DB, req.SourceAccountID, req.DestinationAccountID, req.Amount)
+	transactionID, err := s.Service.CreateTransaction(req.SourceAccountID, req.DestinationAccountID, req.Amount)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -67,8 +65,7 @@ func (s *Server) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Transaction successfully processed",
+		"message":        "Transaction successfully processed",
 		"transaction_id": transactionID,
 	})
-
 }

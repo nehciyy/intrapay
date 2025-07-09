@@ -1,9 +1,7 @@
 package service
 
-import "database/sql"
-
 type Service interface {
-	CreateAccount(db *sql.DB, id int64, balance float64) error
-	GetAccount(db *sql.DB, id int64) (float64, error)
-	CreateTransaction(db *sql.DB, from, to int64, amount float64) (string, error)
+	CreateAccount(accountID int64, initialBalance float64) error
+	GetAccount(accountID int64) (float64, error)
+	CreateTransaction(sourceID int64, destID int64, amount float64) (string, error)
 }
