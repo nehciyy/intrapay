@@ -4,213 +4,323 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/nehciyy/intrapay/internal/service"
 )
+type MockAccountRepository struct {
+	mock.Mock
+}
+
+func (m *MockAccountRepository) CreateAccount(accountID int64, initialBalance float64) error {
+	args := m.Called(accountID, initialBalance)
+	return args.Error(0)
+}
+
+func (m *MockAccountRepository) GetAccountBalance(accountID int64) (float64, error) {
+	args := m.Called(accountID)
+	return args.Get(0).(float64), args.Error(1)
+}
+
+func (m *MockAccountRepository) AccountExists(accountID int64) (bool, error) {
+	args := m.Called(accountID)
+	return args.Bool(0), args.Error(1)
+}
+
+type MockTransactionRepository struct {
+	mock.Mock
+}
+
+func (m *MockTransactionRepository) GetAccountBalanceTx(tx *sql.Tx, accountID int64) (float64, error) {
+	args := m.Called(tx, accountID)
+	return args.Get(0).(float64), args.Error(1)
+}
+
+func (m *MockTransactionRepository) AccountExistsTx(tx *sql.Tx, accountID int64) (bool, error) {
+	args := m.Called(tx, accountID)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *MockTransactionRepository) UpdateBalanceTx(tx *sql.Tx, accountID int64, delta float64) error {
+	args := m.Called(tx, accountID, delta)
+	return args.Error(0)
+}
+
+func (m *MockTransactionRepository) InsertTransactionLogTx(tx *sql.Tx, sourceID, destID int64, amount float64) (string, error) {
+	args := m.Called(tx, sourceID, destID, amount)
+	return args.String(0), args.Error(1)
+}
 
 func newMockDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("failed to create mock db: %v", err)
-	}
+	assert.NoError(t, err, "failed to create mock db")
 	t.Cleanup(func() { db.Close() })
 	return db, mock
 }
 
-func TestCreateAccount_Success(t *testing.T) {
-	db, mock := newMockDB(t)
-	svc := service.NewService()
-
-	accountID := int64(1)
-	initialBalance := 100.0
-
-	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO accounts(account_id, balance) VALUES($1, $2)`)).
-		WithArgs(accountID, initialBalance).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	err := svc.CreateAccount(db, accountID, initialBalance)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestCreateAccount(t *testing.T) {
+	tests := []struct {
+		name           string
+		accountID      int64
+		initialBalance float64
+		mockExpect     func(*MockAccountRepository)
+		expectedError  error
+	}{
+		{
+			name:           "Success",
+			accountID:      1,
+			initialBalance: 100.0,
+			mockExpect: func(mar *MockAccountRepository) {
+				mar.On("CreateAccount", int64(1), 100.0).Return(nil).Once()
+			},
+			expectedError: nil,
+		},
+		{
+			name:           "Duplicate Key Error",
+			accountID:      1,
+			initialBalance: 100.0,
+			mockExpect: func(mar *MockAccountRepository) {
+				mar.On("CreateAccount", int64(1), 100.0).Return(errors.New("duplicate key value violates unique constraint")).Once()
+			},
+			expectedError: errors.New("duplicate key value violates unique constraint"),
+		},
 	}
 
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, _ := newMockDB(t) 
+			mockAccountRepo := new(MockAccountRepository)
+			mockTransactionRepo := new(MockTransactionRepository) 
 
-func TestCreateAccount_DuplicateKeyError(t *testing.T) {
-	db, mock := newMockDB(t)
-	svc := service.NewService()
+			svc := service.NewService(db, mockAccountRepo, mockTransactionRepo)
 
-	accountID := int64(1)
-	initialBalance := 100.0
+			tt.mockExpect(mockAccountRepo)
 
-	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO accounts(account_id, balance) VALUES($1, $2)`)).
-		WithArgs(accountID, initialBalance).
-		WillReturnError(fmt.Errorf("duplicate key value violates unique constraint"))
-
-	err := svc.CreateAccount(db, accountID, initialBalance)
-	if err == nil {
-		t.Fatal("expected error on duplicate key, got nil")
-	}
-
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
-	}
-}
-
-func TestGetAccount_Success(t *testing.T) {
-	db, mock := newMockDB(t)
-	svc := service.NewService()
-
-	accountID := int64(1)
-	expectedBalance := 250.5
-
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT balance FROM accounts WHERE account_id = $1`)).
-		WithArgs(accountID).
-		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(expectedBalance))
-
-	balance, err := svc.GetAccount(db, accountID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if balance != expectedBalance {
-		t.Errorf("expected balance %v, got %v", expectedBalance, balance)
-	}
-
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
+			err := svc.CreateAccount(tt.accountID, tt.initialBalance)
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+			mockAccountRepo.AssertExpectations(t)
+		})
 	}
 }
 
-func TestGetAccount_NotFound(t *testing.T) {
-	db, mock := newMockDB(t)
-	svc := service.NewService()
-
-	accountID := int64(1)
-
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT balance FROM accounts WHERE account_id = $1`)).
-		WithArgs(accountID).
-		WillReturnError(sql.ErrNoRows)
-
-	_, err := svc.GetAccount(db, accountID)
-	if err == nil {
-		t.Fatal("expected error for missing account, got nil")
-	}
-	if !errors.Is(err, sql.ErrNoRows) && err.Error() != fmt.Sprintf("account with ID %d not found", accountID) {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
-	}
-}
-
-func TestCreateTransaction_Success(t *testing.T) {
-	db, mock := newMockDB(t)
-	svc := service.NewService()
-
-	sourceID := int64(1)
-	destID := int64(2)
-	amount := 100.0
-	transactionID := int64(1234)
-
-	mock.ExpectBegin()
-
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT balance FROM accounts WHERE account_id = $1 FOR UPDATE`)).
-		WithArgs(sourceID).
-		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(200.0))
-
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM accounts WHERE account_id = $1)`)).
-		WithArgs(destID).
-		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
-
-	mock.ExpectExec(regexp.QuoteMeta(`UPDATE accounts SET balance = balance + $1 WHERE account_id = $2`)).
-		WithArgs(-amount, sourceID).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectExec(regexp.QuoteMeta(`UPDATE accounts SET balance = balance + $1 WHERE account_id = $2`)).
-		WithArgs(amount, destID).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-
-	mock.ExpectQuery(regexp.QuoteMeta(`
-		INSERT INTO transactions (source_account_id, destination_account_id, amount)
-		VALUES ($1, $2, $3) RETURNING id
-	`)).
-		WithArgs(sourceID, destID, amount).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(transactionID))
-
-	mock.ExpectCommit()
-
-	id, err := svc.CreateTransaction(db, sourceID, destID, amount)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	expectedID := fmt.Sprintf("%d", transactionID)
-	if id != expectedID {
-		t.Errorf("expected transaction id %s, got %v", expectedID, id)
+func TestGetAccount(t *testing.T) {
+	tests := []struct {
+		name            string
+		accountID       int64
+		mockExpect      func(*MockAccountRepository)
+		expectedBalance float64
+		expectedError   error
+	}{
+		{
+			name:      "Success",
+			accountID: 1,
+			mockExpect: func(mar *MockAccountRepository) {
+				mar.On("GetAccountBalance", int64(1)).Return(250.5, nil).Once()
+			},
+			expectedBalance: 250.5,
+			expectedError:   nil,
+		},
+		{
+			name:      "Not Found",
+			accountID: 1,
+			mockExpect: func(mar *MockAccountRepository) {
+				mar.On("GetAccountBalance", int64(1)).Return(float64(0), fmt.Errorf("account with ID %d not found", 1)).Once()
+			},
+			expectedBalance: 0,
+			expectedError:   fmt.Errorf("account with ID %d not found", 1),
+		},
+		{
+			name:      "Database Error",
+			accountID: 1,
+			mockExpect: func(mar *MockAccountRepository) {
+				mar.On("GetAccountBalance", int64(1)).Return(float64(0), errors.New("db connection lost")).Once()
+			},
+			expectedBalance: 0,
+			expectedError:   errors.New("db connection lost"),
+		},
 	}
 
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, _ := newMockDB(t)
+			mockAccountRepo := new(MockAccountRepository)
+			mockTransactionRepo := new(MockTransactionRepository)
+
+			svc := service.NewService(db, mockAccountRepo, mockTransactionRepo)
+
+			tt.mockExpect(mockAccountRepo)
+
+			balance, err := svc.GetAccount(tt.accountID)
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError.Error())
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedBalance, balance)
+			}
+			mockAccountRepo.AssertExpectations(t)
+		})
 	}
 }
 
-func TestCreateTransaction_InsufficientBalance(t *testing.T) {
-	db, mock := newMockDB(t)
-	svc := service.NewService()
-
-	sourceID := int64(1)
-	destID := int64(2)
-	amount := 100.0
-
-	mock.ExpectBegin()
-
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT balance FROM accounts WHERE account_id = $1 FOR UPDATE`)).
-		WithArgs(sourceID).
-		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(50.0))
-
-	mock.ExpectRollback()
-
-	_, err := svc.CreateTransaction(db, sourceID, destID, amount)
-	if err == nil {
-		t.Fatal("expected error for insufficient balance, got nil")
+func TestCreateTransaction(t *testing.T) {
+	tests := []struct {
+		name          string
+		sourceID      int64
+		destID        int64
+		amount        float64
+		mockExpect    func(*MockAccountRepository, *MockTransactionRepository) // No sqlmock.Sqlmock here
+		expectedTxID  string
+		expectedError error
+		sqlMockExpect func(sqlmock.Sqlmock)
+	}{
+		{
+			name:   "Success",
+			sourceID: 1,
+			destID: 2,
+			amount: 100.0,
+			mockExpect: func(mar *MockAccountRepository, mtr *MockTransactionRepository) {
+				mtr.On("GetAccountBalanceTx", mock.Anything, int64(1)).Return(200.0, nil).Once()
+				mtr.On("AccountExistsTx", mock.Anything, int64(2)).Return(true, nil).Once()
+				mtr.On("UpdateBalanceTx", mock.Anything, int64(1), -100.0).Return(nil).Once()
+				mtr.On("UpdateBalanceTx", mock.Anything, int64(2), 100.0).Return(nil).Once()
+				mtr.On("InsertTransactionLogTx", mock.Anything, int64(1), int64(2), 100.0).Return("1234", nil).Once()
+			},
+			sqlMockExpect: func(mockDB sqlmock.Sqlmock) {
+				mockDB.ExpectBegin()
+				mockDB.ExpectCommit()
+			},
+			expectedTxID:  "1234",
+			expectedError: nil,
+		},
+		{
+			name:   "Insufficient Balance",
+			sourceID: 1,
+			destID: 2,
+			amount: 100.0,
+			mockExpect: func(mar *MockAccountRepository, mtr *MockTransactionRepository) {
+				mtr.On("GetAccountBalanceTx", mock.Anything, int64(1)).Return(50.0, nil).Once() // Insufficient
+			},
+			sqlMockExpect: func(mockDB sqlmock.Sqlmock) {
+				mockDB.ExpectBegin()
+				mockDB.ExpectRollback()
+			},
+			expectedTxID:  "",
+			expectedError: fmt.Errorf("insufficient balance in account %d", 1),
+		},
+		{
+			name:   "Destination Account Not Found",
+			sourceID: 1,
+			destID: 2,
+			amount: 100.0,
+			mockExpect: func(mar *MockAccountRepository, mtr *MockTransactionRepository) {
+				mtr.On("GetAccountBalanceTx", mock.Anything, int64(1)).Return(200.0, nil).Once()
+				mtr.On("AccountExistsTx", mock.Anything, int64(2)).Return(false, nil).Once() // Not found
+			},
+			sqlMockExpect: func(mockDB sqlmock.Sqlmock) {
+				mockDB.ExpectBegin()
+				mockDB.ExpectRollback()
+			},
+			expectedTxID:  "",
+			expectedError: fmt.Errorf("destination account %d not found", 2),
+		},
+		{
+			name:   "Max Retries Exceeded",
+			sourceID: 1,
+			destID: 2,
+			amount: 10.0,
+			mockExpect: func(mar *MockAccountRepository, mtr *MockTransactionRepository) {
+				for i := 0; i < 3; i++ {
+					mtr.On("GetAccountBalanceTx", mock.Anything, int64(1)).Return(2000.0, nil).Once()
+					mtr.On("AccountExistsTx", mock.Anything, int64(2)).Return(true, nil).Once()
+					mtr.On("UpdateBalanceTx", mock.Anything, int64(1), -10.0).Return(nil).Once()
+					mtr.On("UpdateBalanceTx", mock.Anything, int64(2), 10.0).Return(nil).Once()
+					mtr.On("InsertTransactionLogTx", mock.Anything, int64(1), int64(2), 10.0).Return("temp_id", nil).Once()
+				}
+			},
+			sqlMockExpect: func(mockDB sqlmock.Sqlmock) {
+				// Simulate DB calls for all 3 retries
+				for i := 0; i < 3; i++ {
+					mockDB.ExpectBegin()
+					mockDB.ExpectCommit().WillReturnError(fmt.Errorf("pq: deadlock detected (SQLSTATE 40001)"))
+				}
+			},
+			expectedTxID:  "",
+			expectedError: errors.New("transaction failed after max retries"),
+		},
+		{
+			name:   "Begin Transaction Failure",
+			sourceID: 1,
+			destID: 2,
+			amount: 100.0,
+			mockExpect: func(mar *MockAccountRepository, mtr *MockTransactionRepository) {
+				// No repository mocks needed as Begin fails immediately
+			},
+			sqlMockExpect: func(mockDB sqlmock.Sqlmock) {
+				mockDB.ExpectBegin().WillReturnError(errors.New("failed to connect to db"))
+			},
+			expectedTxID:  "",
+			expectedError: errors.New("failed to begin transaction: failed to connect to db"),
+		},
+		{
+			name:   "Commit Failure (Non-Serialization)",
+			sourceID: 1,
+			destID: 2,
+			amount: 100.0,
+			mockExpect: func(mar *MockAccountRepository, mtr *MockTransactionRepository) {
+				mtr.On("GetAccountBalanceTx", mock.Anything, int64(1)).Return(200.0, nil).Once()
+				mtr.On("AccountExistsTx", mock.Anything, int64(2)).Return(true, nil).Once()
+				mtr.On("UpdateBalanceTx", mock.Anything, int64(1), -100.0).Return(nil).Once()
+				mtr.On("UpdateBalanceTx", mock.Anything, int64(2), 100.0).Return(nil).Once()
+				mtr.On("InsertTransactionLogTx", mock.Anything, int64(1), int64(2), 100.0).Return("some-id", nil).Once()
+			},
+			sqlMockExpect: func(mockDB sqlmock.Sqlmock) {
+				mockDB.ExpectBegin()
+				mockDB.ExpectCommit().WillReturnError(errors.New("network error on commit"))
+			},
+			expectedTxID:  "",
+			expectedError: errors.New("commit failed"),
+		},
 	}
 
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mockDB := newMockDB(t) // Fresh mock DB for each subtest
+			mockAccountRepo := new(MockAccountRepository)
+			mockTransactionRepo := new(MockTransactionRepository)
 
-func TestCreateTransaction_DestinationAccountNotFound(t *testing.T) {
-	db, mock := newMockDB(t)
-	svc := service.NewService()
+			// Set sqlmock expectations for Begin/Commit/Rollback for this specific test case
+			tt.sqlMockExpect(mockDB)
+			// Set testify/mock expectations for repository methods
+			tt.mockExpect(mockAccountRepo, mockTransactionRepo)
 
-	sourceID := int64(1)
-	destID := int64(2)
-	amount := 100.0
+			svc := service.NewService(db, mockAccountRepo, mockTransactionRepo)
 
-	mock.ExpectBegin()
+			id, err := svc.CreateTransaction(tt.sourceID, tt.destID, tt.amount)
+			if tt.expectedError != nil {
+				require.Error(t, err)
+				require.ErrorContains(t, err, tt.expectedError.Error())
+				require.Equal(t, tt.expectedTxID, id)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedTxID, id)
+			}
 
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT balance FROM accounts WHERE account_id = $1 FOR UPDATE`)).
-		WithArgs(sourceID).
-		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(200.0))
 
-	mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM accounts WHERE account_id = $1)`)).
-		WithArgs(destID).
-		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
-
-	mock.ExpectRollback()
-
-	_, err := svc.CreateTransaction(db, sourceID, destID, amount)
-	if err == nil {
-		t.Fatal("expected error for missing destination account, got nil")
-	}
-
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("unfulfilled expectations: %v", err)
+			// Verify all expectations for both sqlmock and testify/mock
+			assert.NoError(t, mockDB.ExpectationsWereMet(), "sqlmock expectations not met")
+			mockAccountRepo.AssertExpectations(t)
+			mockTransactionRepo.AssertExpectations(t)
+		})
 	}
 }
