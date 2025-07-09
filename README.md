@@ -6,12 +6,12 @@ IntraPay is a lightweight internal transfer system built in Go. It allows users 
 
 ## Features
 
-- ✅ Create account with initial balance
-- ✅ Get account balance
-- ✅ Create transaction between two accounts with balance check and rollback
-- ✅ Safe transactions using `FOR UPDATE` and retry logic
-- ✅ Clean architecture: separated API, service, and repository layers
-- ✅ Full unit test coverage for service and API logic
+- Create account with initial balance
+- Get account balance
+- Create transaction between two accounts with balance check and rollback
+- Safe transactions using `FOR UPDATE` and retry logic
+- Clean architecture: separated API, service, and repository layers
+- Full unit test coverage for service and API logic
 
 ---
 
@@ -93,7 +93,7 @@ This will:
 Once complete, the app will be running at:
 📍 `http://localhost:8080`
 
-**Note: Make sure Docker is running on your system. No need to install PostgreSQL locally, it is containerized.**
+**Note: Make sure Docker and PostgreSQL is running on your system.**
 
 ### 3. Test API with curl
 
